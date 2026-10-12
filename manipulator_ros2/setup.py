@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'manipulator_ros2'
@@ -10,12 +12,13 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='jivani02',
     maintainer_email='hirenjivani02@gmail.com',
-    description='TODO: Package description',
+    description='UR5e manipulator in ROS 2 Jazzy: simulation, kinematics and benchmarks',
     license='MIT',
     extras_require={
         'test': [
