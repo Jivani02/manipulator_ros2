@@ -29,6 +29,30 @@ def fk(q):
         T = T @ dh_step(q[k], D[k], A[k], ALPHA[k])
     return BASE_FLIP @ T
 
+def jacobian(q, eps=1e-6):
+    """3x6 position Jacobian by finite differences."""
+    p0 = fk(q)[:3, 3]
+    J = np.zeros((3, 6))
+    for i in range(6):
+        dq = np.array(q, dtype=float)
+        dq[i] += eps
+        J[:, i] = (fk(dq)[:3, 3] - p0) / eps
+    return J
+
+def ik_position(target, q0, tol=1e-4, max_iter=100, lam=0.05, step_limit=0.3):
+    """Find joint angles whose tool position is `target` (x, y, z in base_link, metres)."""
+    q = np.array(q0, dtype=float)
+    for it in range(max_iter):
+        e = target - fk(q)[:3, 3]
+        if np.linalg.norm(e) < tol:
+            return q, True
+        J = jacobian(q)
+        dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(3), e)   # damped step
+        n = np.linalg.norm(dq)                                         # length of the step
+        if n > step_limit:
+            dq = dq * step_limit/n                                  # BLANK: shorten it to step_limit
+        q = q + dq
+    return q, False                         # did not converge
 
 if __name__ == '__main__':
     np.set_printoptions(suppress=True, precision=3)

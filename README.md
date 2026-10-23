@@ -1,99 +1,111 @@
+cd ~/ros2_ws/src/manipulator_ros2
+cp README.md ~/README_backup.md
+cat > README.md << 'EOF'
 # manipulator_ros2
 
-A UR5e manipulator in ROS 2 Jazzy and Gazebo Sim, built step by step: simulation, joint control, kinematics, planning, perception and pick and place, with measured accuracy at every stage.
-
-The goal is a simulated arm that sees an object, plans a motion, picks it and places it, with the error of each stage measured and documented.
-
-Related project: [mobile_robot_ros2](https://github.com/Jivani02/mobile_robot_ros2) (mobile robot with SLAM, Nav2 and odometry calibration).
+A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that sees an object, plans a motion, picks it up and places it, with measured accuracy.
 
 ## Status
 
-- [x] 1. UR5e in Gazebo Sim with RViz, started from one launch file
-- [x] 2. Joint control node (`move_arm`): send the arm to any joint pose
-- [x] 3. Forward kinematics from the DH table, validated against the simulator's TF
-- [ ] 4. Inverse kinematics and an accuracy comparison tool
-- [ ] 5. MoveIt 2 planning with collision objects
-- [ ] 6. Object detection with a stereo camera
-- [ ] 7. Pick and place demo
-- [ ] 8. Write-up with measured results
+- [x] 1. UR5e arm in simulation
+- [x] 2. Joint control node (`move_arm`)
+- [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
+- [ ] 4. Inverse kinematics: Jacobian and damped least-squares IK for the tool position are done; the `move_to x y z` command is in progress; an accuracy comparison tool is planned
+- [ ] 5. MoveIt 2 with collision objects
+- [ ] 6. Stereo camera object detection
+- [ ] 7. Pick-and-place demo
+- [ ] 8. Write-up
 
 ## Requirements
 
-- Ubuntu 24.04 with ROS 2 Jazzy
-- Universal Robots ROS 2 packages: `ur_simulation_gz`, `ur_description`
-- Python 3 with NumPy
+- Ubuntu 24.04
+- ROS 2 Jazzy
+- `ur_simulation_gz` and `ur_description`
+- NumPy
 
-## Build
+## Build and run
 
-```
-cd ~/ros2_ws/src
-git clone https://github.com/Jivani02/manipulator_ros2.git
+```bash
 cd ~/ros2_ws
 colcon build --symlink-install
 source install/setup.bash
-```
 
-## Run
-
-Start the simulation (Gazebo Sim and RViz):
-
-```
+# terminal 1: simulation
 ros2 launch manipulator_ros2 sim.launch.py
+
+# terminal 2: move the arm
+ros2 run manipulator_ros2 move_arm                      # home pose
+ros2 run manipulator_ros2 move_arm q1 q2 q3 q4 q5 q6    # six joint angles in radians, 5 s
 ```
 
-Move the arm in a second terminal. Without values it goes to the home pose (upright); with six joint angles in radians it goes to that pose in 5 seconds:
-
-```
-ros2 run manipulator_ros2 move_arm
-ros2 run manipulator_ros2 move_arm 0.5 -1.0 1.0 -1.5 0.3 0.2
-```
-
-The node sends a `FollowJointTrajectory` goal to `/scaled_joint_trajectory_controller/follow_joint_trajectory`. Joint order: shoulder_pan, shoulder_lift, elbow, wrist_1, wrist_2, wrist_3.
+`move_arm` is an action client for `FollowJointTrajectory`
+(`/scaled_joint_trajectory_controller/follow_joint_trajectory`).
 
 ## Forward kinematics
 
-`manipulator_ros2/kinematics.py` computes the pose of `tool0` from six joint angles with the standard DH convention. The function `fk(q)` multiplies the six joint transforms and returns a 4x4 matrix in the `base_link` frame.
+`kinematics.py` computes the pose of `tool0` in `base_link` from six joint angles with the standard
+Denavit-Hartenberg convention, `T = Rz(theta) * Tz(d) * Tx(a) * Rx(alpha)`.
 
-UR5e DH table (lengths in metres):
-
-| Joint | alpha | a | d |
+| Joint | a (m) | d (m) | alpha |
 |---|---|---|---|
-| 1 | 90 deg | 0 | 0.1625 |
-| 2 | 0 | -0.425 | 0 |
-| 3 | 0 | -0.3922 | 0 |
-| 4 | 90 deg | 0 | 0.1333 |
-| 5 | -90 deg | 0 | 0.0997 |
-| 6 | 0 | 0 | 0.0996 |
+| 1 | 0 | 0.1625 | 90 deg |
+| 2 | -0.425 | 0 | 0 |
+| 3 | -0.3922 | 0 | 0 |
+| 4 | 0 | 0.1333 | 90 deg |
+| 5 | 0 | 0.0997 | -90 deg |
+| 6 | 0 | 0.0996 | 0 |
 
-The joint angle is theta for each joint (all offsets are zero).
+The negative `a` values come from the UR convention, where the x axes point against the arm direction.
 
-**Frames.** The DH chain gives the pose in the UR base frame (`base`). In the robot model, `base_link` is that frame turned by 180 degrees about z, so `fk` applies this rotation at the end. I checked this with `ros2 run tf2_ros tf2_echo base_link base`, which shows a pure 180 degree yaw with no translation.
+### Frames
 
-### Validation against the simulator
+The robot description has `base_link` (the ROS root) and a fixed joint to `base`, a pure 180 degree yaw
+without translation. `base` is the base frame of the DH convention. The raw DH chain therefore gives
+the pose in `base`, and a constant 180 degree rotation about z (`BASE_FLIP`) converts it to `base_link`.
+This was checked with `ros2 run tf2_ros tf2_echo base tool0` and `... base_link tool0`.
 
-I compared `fk(q)` with the pose that TF reports (`tf2_echo base_link tool0`) after moving the simulated arm.
+### Validation against TF
 
-| Pose (joint angles in rad) | TF position (m) | `fk` position (m) |
+| Pose (joint angles in rad) | Position (m) | Result |
 |---|---|---|
-| 0, -1.57, 0, -1.57, 0, 0 (home) | 0.001, 0.233, 1.079 | 0.001, 0.233, 1.079 |
-| 0.5, -1.0, 1.0, -1.5, 0.3, 0.2 | 0.525, 0.547, 0.542 | 0.525, 0.547, 0.542 |
+| home `[0, -1.57, 0, -1.57, 0, 0]` | (0.001, 0.233, 1.079) | matches TF to 3 decimals |
+| test `[0.5, -1.0, 1.0, -1.5, 0.3, 0.2]` | (0.525, 0.547, 0.542) | position and rotation match TF to 3 decimals |
 
-The rotation matrices agree as well (three decimals). The next step is an automatic tool that does this comparison for many poses and reports the error in millimetres.
+## Inverse kinematics
 
-## Repository layout
+Position-only, numerical IK (`ik_position` in `kinematics.py`):
+
+1. `e = target - fk(q)` is the position error of the tool.
+2. `jacobian(q)` is the 3x6 position Jacobian, computed by finite differences. Column i is how the tool
+   moves per radian of joint i.
+3. The joint step is the damped least-squares solution
+   `dq = J^T (J J^T + lambda^2 I)^-1 e` with `lambda = 0.05`, limited to 0.3 rad per iteration.
+4. Repeat until the error is below 0.1 mm (at most 100 iterations).
+
+**Why damping and a step limit.** The home pose (arm stretched upright) is a singular pose: the tool
+can hardly move in y and z. With a plain pseudo-inverse, the IK reached the target from home
+(error 0.09 mm) but with joint angles of about 3000 rad. With damping and the step limit, the same
+target is reached with all joint angles below 2 rad.
+
+|new = """Target: (0.5253, 0.5473, 0.5424) m, the tool position of the test pose.
+
+| Start pose | Resulting joint angles (rad) | Position error |
+|---|---|---|
+| ready `[0, -1.2, 1.4, -1.8, -1.57, 0]` | `[0.611, -1.032, 0.914, -2.009, -1.435, 0]` | 0.080 mm |
+| home `[0, -1.57, 0, -1.57, 0, 0]` | `[0.497, -0.977, 0.828, -1.312, -0.201, 0]` | 0.057 mm |
+
+Limits: only the tool position is controlled (not the orientation), joint 6 stays unchanged, and
+the solution found is the one near the start pose (a 6-axis arm usually has several solutions).
+
+## Layout
 
 ```
-manipulator_ros2/            repository
+manipulator_ros2/                  repository
   README.md
-  manipulator_ros2/          ROS 2 package
-    package.xml, setup.py
-    launch/sim.launch.py     starts Gazebo Sim and RViz
-    manipulator_ros2/
-      move_arm.py            joint control node
-      kinematics.py          DH forward kinematics
+  manipulator_ros2/                ROS package (package.xml, setup.py, launch/, resource/)
+    manipulator_ros2/              Python module
+      move_arm.py                  FollowJointTrajectory client
+      kinematics.py                DH forward kinematics, Jacobian, IK
 ```
-
-## Author
-
-Hirenbhai Jivani, M.Eng. Mechatronics and Cyber-Physical Systems, Deggendorf Institute of Technology
-GitHub: [Jivani02](https://github.com/Jivani02)
+EOF
+git status --short
