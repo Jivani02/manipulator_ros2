@@ -107,5 +107,4 @@ manipulator_ros2/                  repository
       move_arm.py                  FollowJointTrajectory client
       kinematics.py                DH forward kinematics, Jacobian, IK
 ```
-EOF
-git status --short
+
