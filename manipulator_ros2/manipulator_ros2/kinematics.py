@@ -50,7 +50,7 @@ def ik_position(target, q0, tol=1e-4, max_iter=100, lam=0.05, step_limit=0.3):
         dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(3), e)   # damped step
         n = np.linalg.norm(dq)                                         # length of the step
         if n > step_limit:
-            dq = dq * step_limit/n                                  # BLANK: shorten it to step_limit
+            dq = dq * step_limit/n                                  
         q = q + dq
     return q, False                         # did not converge
 
