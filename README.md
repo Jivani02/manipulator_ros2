@@ -163,7 +163,7 @@ MoveIt 2 (`ur_moveit_config`) runs on top of the simulation. It loads the robot 
 
 ```bash
 # terminal 1: simulation without its own RViz
-ros2 launch manipulator_ros2 sim.launch.py launch_rviz:=false
+ros2 launch manipulator_ros2 sim.launch.py 
 
 # terminal 2: MoveIt with the Motion Planning panel (after the arm stands in Gazebo)
 ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur5e use_sim_time:=true launch_rviz:=true

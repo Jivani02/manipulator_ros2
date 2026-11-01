@@ -31,7 +31,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('ur_type', default_value='ur5e'),
-        DeclareLaunchArgument('launch_rviz', default_value='true'),
+        DeclareLaunchArgument('launch_rviz', default_value='false'),
         DeclareLaunchArgument('gazebo_gui', default_value='true'),
         DeclareLaunchArgument(
             'description_file',
