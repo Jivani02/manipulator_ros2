@@ -10,7 +10,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - [x] 1. UR5e arm in simulation
 - [x] 2. Joint control node (`move_arm`)
 - [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
-- [ ] 4. Inverse kinematics: Jacobian and damped least-squares IK are done; `move_to x y z` works end to end and is confirmed against TF; an accuracy tool over a grid of targets is planned
+- - [x] 4. Inverse kinematics: Jacobian and damped least-squares IK, `move_to x y z` confirmed against TF, accuracy test over a grid of targets
 - [ ] 5. MoveIt 2 with collision objects
 - [ ] 6. Stereo camera object detection
 - [ ] 7. Pick-and-place demo
@@ -123,15 +123,53 @@ Targets that were refused or exposed limits:
 | (0.0, 0.0, 0.9) | IK did not converge (stretched pose near a singularity), error 33.7 mm, no motion |
 | (0.4, 0.3, -0.1) | IK solved (0.007 mm), but the arm stopped at z = 0.021 m on the ground plane. The IK has no collision checking. This is the reason for step 5 (MoveIt 2 with collision objects). |
 
+## Simulation setup
+
+The arm stands on a table (top 1.2 x 0.9 m, 0.70 m high). The table is part of the robot description
+(`urdf/ur5e_table.urdf.xacro`, visible in RViz) and of the Gazebo world (`worlds/table.sdf`), with the
+same dimensions. The tabletop is z = 0 in `base_link`, so z = 0.1 means 0.1 m above the table.
+
+## IK accuracy test
+
+`accuracy.py` solves the IK for a grid of targets with the same start pose as `move_to`, checks every
+solution with the own forward kinematics, and saves all rows to a CSV file
+(`x, y, z, error_mm, iterations, success`). A target counts as reached if the position error is below 1 mm.
+
+| Test | Targets | Reached | Mean error | Max error | Iterations |
+|---|---|---|---|---|---|
+| Working area: r 0.25 to 0.75 m, z 0.1 to 0.7 m, step 0.1 m | 1092 | 1092 (100 %) | 0.030 mm | 0.100 mm | mean 11, max 30 |
+| Wide area: r 0 to 1.0 m, z -0.3 to 1.0 m, step 0.2 m | 567 | 408 (72 %) | 0.034 mm | 0.100 mm | mean 12.9, max 76 |
+
+Results: `results/ik_accuracy.csv` and `results/ik_accuracy_wide.csv`.
+
+The 159 failures in the wide area are consistent with geometric limits of the arm:
+
+- **Outer reach.** Targets at r = 1.0 m fail by 35 mm at the best height (shoulder height) and by more
+  at other heights. The tool reaches about 0.96 m horizontally.
+- **Base axis.** Targets with x = y = 0 fail with the same error of 33.7 mm at every height. This equals
+  d4 - d6 = 0.1333 m - 0.0996 m = 0.0337 m, which is consistent with a small region around the base
+  axis that the tool flange cannot reach.
+- **Floor and ceiling.** Targets at z = 0.9 m (a few mm above the reachable height) and far targets
+  at z = -0.3 m.
+
+Not tested: collisions with the table or with the arm itself (planned with MoveIt 2), and retries from
+other start poses.
+
 ## Layout
 
 ```
 manipulator_ros2/                  repository
   README.md
-  manipulator_ros2/                ROS package (package.xml, setup.py, launch/, resource/)
+  results/                         IK accuracy results (CSV)
+  manipulator_ros2/                ROS package (package.xml, setup.py, resource/)
+    launch/sim.launch.py           simulation with the arm on a table
+    urdf/ur5e_table.urdf.xacro     UR5e on a table (robot description)
+    worlds/table.sdf               Gazebo world with the table
     manipulator_ros2/              Python module
       move_arm.py                  FollowJointTrajectory client
       move_to.py                   x y z command: IK, check, motion
       kinematics.py                DH forward kinematics, Jacobian, IK
+      accuracy.py                  IK accuracy test over a grid of targets
+```
 ```
 
