@@ -1,6 +1,4 @@
-cd ~/ros2_ws/src/manipulator_ros2
-cp README.md ~/README_backup.md
-cat > README.md << 'EOF'
+
 # manipulator_ros2
 
 A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that sees an object, plans a motion, picks it up and places it, with measured accuracy.
@@ -10,7 +8,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - [x] 1. UR5e arm in simulation
 - [x] 2. Joint control node (`move_arm`)
 - [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
-- - [x] 4. Inverse kinematics: Jacobian and damped least-squares IK, `move_to x y z` confirmed against TF, accuracy test over a grid of targets
+- [x] 4. Inverse kinematics: Jacobian and damped least-squares IK, `move_to x y z` confirmed against TF, accuracy test over a grid of targets
 - [ ] 5. MoveIt 2 with collision objects
 - [ ] 6. Stereo camera object detection
 - [ ] 7. Pick-and-place demo
@@ -125,9 +123,12 @@ Targets that were refused or exposed limits:
 
 ## Simulation setup
 
-The arm stands on a table (top 1.2 x 0.9 m, 0.70 m high). The table is part of the robot description
+The arm stands on a table (top 1.2 x 0.9 m, about 0.70 m high). The table is part of the robot description
 (`urdf/ur5e_table.urdf.xacro`, visible in RViz) and of the Gazebo world (`worlds/table.sdf`), with the
-same dimensions. The tabletop is z = 0 in `base_link`, so z = 0.1 means 0.1 m above the table.
+same dimensions. It is one link with five boxes (top and four legs), and the tabletop is 5 mm below the
+arm base. Both choices avoid permanent contacts in MoveIt's collision model: separate touching links
+and a base standing directly on the top were reported as collisions at rest. The tabletop is at
+z = -0.005 m in `base_link`, so z = 0.1 means about 0.1 m above the table.
 
 ## IK accuracy test
 
@@ -154,6 +155,26 @@ The 159 failures in the wide area are consistent with geometric limits of the ar
 
 Not tested: collisions with the table or with the arm itself (planned with MoveIt 2), and retries from
 other start poses.
+
+## MoveIt 2
+
+MoveIt 2 (`ur_moveit_config`) runs on top of the simulation. It loads the robot description from the
+`/robot_description` topic, so the table of the simulation is part of its collision model.
+
+```bash
+# terminal 1: simulation without its own RViz
+ros2 launch manipulator_ros2 sim.launch.py launch_rviz:=false
+
+# terminal 2: MoveIt with the Motion Planning panel (after the arm stands in Gazebo)
+ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur5e use_sim_time:=true launch_rviz:=true
+```
+
+Checked in RViz: a goal inside reach is planned and executed, and the arm in Gazebo follows. A goal in which
+a link touches the table is shown in red and planning fails.
+
+Known behaviour: with the default OMPL settings (5 s planning time), some goals are not planned.
+A goal inside the table or in a self-collision is rejected immediately. For other goals the search
+ends without a path after the planning time.
 
 ## Layout
 
