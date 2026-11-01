@@ -10,7 +10,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - [x] 1. UR5e arm in simulation
 - [x] 2. Joint control node (`move_arm`)
 - [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
-- [ ] 4. Inverse kinematics: Jacobian and damped least-squares IK for the tool position are done; the `move_to x y z` command is in progress; an accuracy comparison tool is planned
+- [ ] 4. Inverse kinematics: Jacobian and damped least-squares IK are done; `move_to x y z` works end to end and is confirmed against TF; an accuracy tool over a grid of targets is planned
 - [ ] 5. MoveIt 2 with collision objects
 - [ ] 6. Stereo camera object detection
 - [ ] 7. Pick-and-place demo
@@ -36,6 +36,7 @@ ros2 launch manipulator_ros2 sim.launch.py
 # terminal 2: move the arm
 ros2 run manipulator_ros2 move_arm                      # home pose
 ros2 run manipulator_ros2 move_arm q1 q2 q3 q4 q5 q6    # six joint angles in radians, 5 s
+ros2 run manipulator_ros2 move_to x y z                 # tool position in metres, base_link frame
 ```
 
 `move_arm` is an action client for `FollowJointTrajectory`
@@ -87,7 +88,7 @@ can hardly move in y and z. With a plain pseudo-inverse, the IK reached the targ
 (error 0.09 mm) but with joint angles of about 3000 rad. With damping and the step limit, the same
 target is reached with all joint angles below 2 rad.
 
-|new = """Target: (0.5253, 0.5473, 0.5424) m, the tool position of the test pose.
+Target: (0.5253, 0.5473, 0.5424) m, the tool position of the test pose.
 
 | Start pose | Resulting joint angles (rad) | Position error |
 |---|---|---|
@@ -97,6 +98,31 @@ target is reached with all joint angles below 2 rad.
 Limits: only the tool position is controlled (not the orientation), joint 6 stays unchanged, and
 the solution found is the one near the start pose (a 6-axis arm usually has several solutions).
 
+## move_to: Cartesian target to arm motion
+
+`move_to x y z` solves the IK from a fixed start pose, checks the result with the own forward
+kinematics, and sends the joint angles to the arm only if the position error is below 1 mm.
+Targets with z below 0.05 m are refused.
+
+End-to-end test in the simulator (tool position read from `tf2_echo base_link tool0`):
+
+| Target (m) | IK error | Tool position in TF |
+|---|---|---|
+| (0.4, 0.3, 0.4) | 0.066 mm | (0.400, 0.300, 0.400) |
+| (0.4, -0.3, 0.4) | 0.066 mm | (0.400, -0.300, 0.400) |
+| (0.5, 0.0, 0.3) | 0.006 mm | (0.500, -0.000, 0.300)|
+| (0.3, 0.3, 0.5) | 0.025 mm | (0.300, 0.300, 0.500) |
+| (-0.4, 0.3, 0.4) | 0.009 mm | (-0.400, 0.300, 0.400) |
+| (0.6, 0.2, 0.2) | 0.033 mm | (0.600, 0.200, 0.200) |
+
+Targets that were refused or exposed limits:
+
+| Target (m) | Result |
+|---|---|
+| (1.2, 0.0, 0.4) | outside the 0.85 m reach, IK error 256.5 mm, no motion |
+| (0.0, 0.0, 0.9) | IK did not converge (stretched pose near a singularity), error 33.7 mm, no motion |
+| (0.4, 0.3, -0.1) | IK solved (0.007 mm), but the arm stopped at z = 0.021 m on the ground plane. The IK has no collision checking. This is the reason for step 5 (MoveIt 2 with collision objects). |
+
 ## Layout
 
 ```
@@ -105,6 +131,7 @@ manipulator_ros2/                  repository
   manipulator_ros2/                ROS package (package.xml, setup.py, launch/, resource/)
     manipulator_ros2/              Python module
       move_arm.py                  FollowJointTrajectory client
+      move_to.py                   x y z command: IK, check, motion
       kinematics.py                DH forward kinematics, Jacobian, IK
 ```
 

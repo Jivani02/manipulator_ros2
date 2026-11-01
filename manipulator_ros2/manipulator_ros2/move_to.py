@@ -20,6 +20,10 @@ def main():
         return
 
     target = np.array([float(v) for v in sys.argv[1:4]])
+    Z_MIN = 0.05
+    if target[2] < Z_MIN:
+        print(f'target z below {Z_MIN} m: close to the floor, no motion sent')
+        return
     print('target:',target)
     result=ik_position(target,Q_START)
     q=result[0] if isinstance(result, tuple) else result
