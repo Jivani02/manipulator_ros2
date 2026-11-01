@@ -45,14 +45,15 @@ def ik_position(target, q0, tol=1e-4, max_iter=100, lam=0.05, step_limit=0.3):
     for it in range(max_iter):
         e = target - fk(q)[:3, 3]
         if np.linalg.norm(e) < tol:
-            return q, True
+            return q, True, it
+            
         J = jacobian(q)
         dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(3), e)   # damped step
         n = np.linalg.norm(dq)                                         # length of the step
         if n > step_limit:
             dq = dq * step_limit/n                                  
         q = q + dq
-    return q, False                         # did not converge
+    return q, False, max_iter                        
 
 if __name__ == '__main__':
     np.set_printoptions(suppress=True, precision=3)
