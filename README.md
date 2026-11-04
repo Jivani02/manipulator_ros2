@@ -172,9 +172,30 @@ ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur5e use_sim_time:=tru
 Checked in RViz: a goal inside reach is planned and executed, and the arm in Gazebo follows. A goal in which
 a link touches the table is shown in red and planning fails.
 
-Known behaviour: with the default OMPL settings (5 s planning time), some goals are not planned.
-A goal inside the table or in a self-collision is rejected immediately. For other goals the search
-ends without a path after the planning time.
+### Goals that fail to plan
+
+Some goals set in RViz (for example "Random Valid") are not planned, although the pose is reachable.
+The cause is the joint representation of the goal. The UR5e joints may turn ±360°, so RViz can
+choose joint values such as 295° for a pose that is also reached with −65°. OMPL plans in joint space
+and has to turn the joint 385° from a start of −90°. This swings the arm through the table or the base,
+and the search ends without a path after the planning time. A goal inside the table or in a
+self-collision is rejected immediately instead.
+
+`check_path.py` shows this. It reads the current joints from `/joint_states`, takes the six goal
+joints from the Joints tab of RViz (in degrees) and prints the nearest equivalent joints,
+`q0 + wrap(q1 - q0)`.
+
+```bash
+python3 check_path.py 245 295 72 162 43 -62
+```
+
+```text
+q1 - q0:         [ 4.28  6.72  1.26  4.4   0.75 -1.08]
+q1n - q0:        [-2.01  0.44  1.26 -1.89  0.75 -1.08]
+q1n in degrees:  [-115.  -65.   72. -198.   43.  -62.]
+```
+
+A goal that failed with the original joints was planned and executed with the nearest joints.
 
 ## Layout
 
