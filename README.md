@@ -9,7 +9,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - [x] 2. Joint control node (`move_arm`)
 - [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
 - [x] 4. Inverse kinematics: Jacobian and damped least-squares IK, `move_to x y z` confirmed against TF, accuracy test over a grid of targets
-- [ ] 5. MoveIt 2 with collision objects
+- [x] 5. MoveIt 2 with collision objects: planning and execution through RViz and the planning service, failed goals traced to long joint paths (`check_path`)
 - [ ] 6. Stereo camera object detection
 - [ ] 7. Pick-and-place demo
 - [ ] 8. Write-up
@@ -178,25 +178,30 @@ Some goals set in RViz (for example "Random Valid") are not planned, although th
 The cause is the joint representation of the goal. The UR5e joints may turn ±360°, so RViz can
 choose joint values such as 295° for a pose that is also reached with −65°. OMPL plans in joint space
 and has to turn the joint 385° from a start of −90°. This swings the arm through the table or the base,
-and the search ends without a path after the planning time. A goal inside the table or in a
+and the search ends without a path. A longer planning time did not help. A goal inside the table or in a
 self-collision is rejected immediately instead.
 
-`check_path.py` shows this. It reads the current joints from `/joint_states`, takes the six goal
-joints from the Joints tab of RViz (in degrees) and prints the nearest equivalent joints,
-`q0 + wrap(q1 - q0)`.
+`check_path.py` reproduces this with MoveIt's planning service `/plan_kinematic_path`. It reads the
+current joints from `/joint_states`, takes the six goal joints from the Joints tab of RViz (in degrees),
+computes the nearest equivalent joints `q0 + wrap(q1 - q0)` and plans with both goals. If the nearest
+goal is planned, it executes the trajectory through the `FollowJointTrajectory` action.
 
 ```bash
 python3 check_path.py 245 295 72 162 43 -62
 ```
 
 ```text
-q1 - q0:         [ 4.28  6.72  1.26  4.4   0.75 -1.08]
-q1n - q0:        [-2.01  0.44  1.26 -1.89  0.75 -1.08]
+q0 (current):    [ 0.   -1.57  0.   -1.57  0.    0.  ]
+q1 (RViz goal):  [ 4.28  5.15  1.26  2.83  0.75 -1.08]
+q1 nearest:      [-2.01 -1.13  1.26 -3.46  0.75 -1.08]
 q1n in degrees:  [-115.  -65.   72. -198.   43.  -62.]
+RViz goal q1 -> code 99999 , points 0
+nearest q1n  -> code 1 , points 14
+execution result code: 0
 ```
 
-A goal that failed with the original joints was planned and executed with the nearest joints.
-
+The same pose fails with the original joint values (code 99999, `FAILURE`) and is planned with the nearest
+joints (14 trajectory points, 0.05 s). The arm reaches it in Gazebo.
 ## Layout
 
 ```
@@ -212,6 +217,7 @@ manipulator_ros2/                  repository
       move_to.py                   x y z command: IK, check, motion
       kinematics.py                DH forward kinematics, Jacobian, IK
       accuracy.py                  IK accuracy test over a grid of targets
+      check_path.py                MoveIt planning service: nearest joints, plan, execute
 ```
 ```
 
