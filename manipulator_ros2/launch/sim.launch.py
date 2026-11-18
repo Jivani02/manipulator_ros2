@@ -3,6 +3,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -29,6 +30,17 @@ def generate_launch_description():
         }.items(),
     )
 
+    camera_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/top_camera/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/top_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+        ],
+        output='screen',
+    )
+    
+
     return LaunchDescription([
         DeclareLaunchArgument('ur_type', default_value='ur5e'),
         DeclareLaunchArgument('launch_rviz', default_value='false'),
@@ -46,4 +58,5 @@ def generate_launch_description():
             ]),
         ),
         ur_sim,
+        camera_bridge,
     ])
