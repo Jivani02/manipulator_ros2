@@ -5,6 +5,7 @@ import rclpy
 from detect import Detector, red_mask, find_cube, pixel_to_xy
 import csv
 import os
+import random
 
 def place_cube(x, y, yaw):
     qz = math.sin(yaw / 2)
@@ -40,13 +41,25 @@ def make_points():
          
     return points
 
+def random_points(n=50, seed=1):
+    position = []
+    rng = random.Random(seed)
+    while len(position) < n:
+        
+        x = rng.uniform(0.35, 0.75)
+        y = rng.uniform(-0.3,0.3)
+        if math.hypot(x, y) <= 0.75:
+            position.append((round(x, 3), round(y, 3), round(rng.uniform(0, 1.5), 2)))
+
+    return position
+
 if __name__ == '__main__':
     rclpy.init()
     nod = Detector()
     try:
         while nod.frame is None or nod.k is None:
             rclpy.spin_once(nod, timeout_sec=0.5)
-        pts = make_points()
+        pts = random_points()
         rows = []
         for x, y, yaw in pts:
             place_cube(x, y, yaw)
@@ -62,7 +75,7 @@ if __name__ == '__main__':
         print('detected:', len(rows), 'of', len(pts))
         print('mean error (mm):', round(sum(errs) / len(errs), 2))
         print('max error (mm):', round(max(errs), 2))
-        path = os.path.expanduser('~/ros2_ws/src/manipulator_ros2/results/camera_accuracy.csv')
+        path = os.path.expanduser('~/ros2_ws/src/manipulator_ros2/results/camera_accuracy_random.csv')
         with open(path, 'w', newline='') as f:
             w = csv.writer(f)
             w.writerow(['x', 'y', 'yaw', 'measured_x', 'measured_y', 'dx_mm', 'dy_mm', 'error_mm'])

@@ -8,7 +8,7 @@ from sensor_msgs.msg import CameraInfo
 
 CAM_X = 0.5     # camera x in base_link (m)
 CAM_Y = 0.0     # camera y in base_link (m)
-Z = 0.955       # camera height above the cube's top face (m)
+Z = 0.975       # camera height above the cube's top face (m)
 
 class Detector(Node):
     def __init__(self):
