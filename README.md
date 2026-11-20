@@ -10,7 +10,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
 - [x] 4. Inverse kinematics: Jacobian and damped least-squares IK, `move_to x y z` confirmed against TF, accuracy test over a grid of targets
 - [x] 5. MoveIt 2 with collision objects: planning and execution through RViz and the planning service, failed goals traced to long joint paths (`check_path`)
-- [ ] 6. Stereo camera object detection
+- [ ] 6. RGB camera cube detection: position and yaw measured, test with several cubes open
 - [ ] 7. Pick-and-place demo
 - [ ] 8. Write-up
 
@@ -20,6 +20,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - ROS 2 Jazzy
 - `ur_simulation_gz` and `ur_description`
 - NumPy
+- OpenCV for Python (`python3-opencv`)
 
 ## Build and run
 
@@ -202,22 +203,83 @@ execution result code: 0
 
 The same pose fails with the original joint values (code 99999, `FAILURE`) and is planned with the nearest
 joints (14 trajectory points, 0.05 s). The arm reaches it in Gazebo.
+
+## Camera: cube detection
+
+A fixed RGB camera above the table finds a red cube and gives its position and rotation in the
+`base_link` frame. The method is classical computer vision (OpenCV), without machine learning.
+
+Setup: the camera is part of `worlds/table.sdf` (1.0 m above the tabletop, looking straight down,
+640 x 480, field of view 1.0 rad). `sim.launch.py` bridges the image and `camera_info` to ROS with
+`ros_gz_bridge`. The cube is 5 cm wide.
+
+Method (`detect.py`):
+
+1. HSV threshold for red gives a mask.
+2. The largest contour (at least 200 pixels, smaller blobs count as noise) gives the centre (u, v) and
+   the angle through `cv2.minAreaRect`.
+3. Back-projection with the intrinsics from `camera_info` and the known camera height `Z`:
+   `x = CAM_X + (cy - v) * Z / fy` and `y = CAM_Y + (cx - u) * Z / fx`.
+4. Yaw is `(90 - angle) mod 90` degrees. A cube looks the same every 90 degrees, so its yaw is only
+   known modulo 90 degrees.
+
+### Accuracy test
+
+`cam_accuracy.py` places the cube at known positions with the Gazebo `set_pose` service, waits until it
+has settled, detects it in a fresh frame, and compares the result with the true pose. All rows are
+saved to a CSV file (`x, y, yaw, measured_x, measured_y, dx_mm, dy_mm, error_mm`, plus `yaw_error_deg`
+in the last run). The test points are chosen in the main block: a grid (x 0.35 to 0.75 m, y -0.3 to
+0.3 m, step 0.1 m, three yaw angles, 87 placements) or 50 random positions in the same area.
+
+| Test | Placements | Detected | Mean error | Max error |
+|---|---|---|---|---|
+| Grid, plane at the top face (`Z` = 0.955 m) | 87 | 87 | 4.09 mm | 8.04 mm |
+| Grid, `Z` = 0.975 m | 87 | 87 | 1.23 mm | 2.31 mm |
+| 50 random positions, `Z` = 0.975 m | 50 | 50 | 1.21 mm | 2.28 mm |
+
+Yaw error on the 50 random positions: mean 0.22 deg, maximum 1.72 deg.
+
+Results: `results/camera_accuracy_top_face.csv`, `results/camera_accuracy.csv` and
+`results/camera_accuracy_random.csv`.
+
+### Why `Z` = 0.975 m
+
+With the top-face height the error grew with the distance from the camera axis. The measured
+positions were about 2 % too close to the axis (a true y of 0.3 m was measured as 0.2943 m), and the
+error was close to 1 mm at the axis and 6 to 8 mm at the edges. This is a scale error: the visible
+side face of the cube is part of the blob, so the blob centre lies below the top face, and using the top-face
+height under-scales the pixel to metre conversion. A plane about in the middle of the cube (`Z` = 0.975 m)
+removes the error. `Z` was fitted on the grid, so the 50 random positions are the validation.
+The yaw has no effect on the position (differences below 1 mm).
+
+Limits: one fixed camera and a known object height, so only objects lying on the table can be
+located. One pixel is about 1.6 mm at the table. The yaw is known modulo 90 degrees. So far only the
+red cube alone was tested, and only in simulation with constant lighting.
+
+```bash
+ros2 launch manipulator_ros2 sim.launch.py                  # terminal 1: simulation and camera bridge
+python3 detect.py                                           # terminal 2: print the position of the red cube
+python3 cam_accuracy.py                                     # terminal 2: accuracy test, writes the CSV
+```
+Run both scripts from `manipulator_ros2/manipulator_ros2/`.
+
 ## Layout
 
 ```
 manipulator_ros2/                  repository
   README.md
-  results/                         IK accuracy results (CSV)
+  results/                         IK and camera accuracy results (CSV)
   manipulator_ros2/                ROS package (package.xml, setup.py, resource/)
-    launch/sim.launch.py           simulation with the arm on a table
+    launch/sim.launch.py           simulation with the arm on a table, camera bridge
     urdf/ur5e_table.urdf.xacro     UR5e on a table (robot description)
-    worlds/table.sdf               Gazebo world with the table
+    worlds/table.sdf               Gazebo world with the table, the camera and the cube
     manipulator_ros2/              Python module
       move_arm.py                  FollowJointTrajectory client
       move_to.py                   x y z command: IK, check, motion
       kinematics.py                DH forward kinematics, Jacobian, IK
       accuracy.py                  IK accuracy test over a grid of targets
       check_path.py                MoveIt planning service: nearest joints, plan, execute
-```
+      detect.py                    red cube detection from the top camera
+      cam_accuracy.py              camera accuracy test (grid or random positions)
 ```
 
