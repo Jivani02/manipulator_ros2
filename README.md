@@ -10,7 +10,7 @@ A UR5e robot arm in ROS 2 Jazzy and Gazebo. The goal is a simulated arm that see
 - [x] 3. Forward kinematics (own DH implementation), validated against the simulator's TF tree
 - [x] 4. Inverse kinematics: Jacobian and damped least-squares IK, `move_to x y z` confirmed against TF, accuracy test over a grid of targets
 - [x] 5. MoveIt 2 with collision objects: planning and execution through RViz and the planning service, failed goals traced to long joint paths (`check_path`)
-- [ ] 6. RGB camera cube detection: position and yaw measured, test with several cubes open
+- [x] 6. RGB camera cube detection: position and yaw measured, test with several cubes open
 - [ ] 7. Pick-and-place demo
 - [ ] 8. Write-up
 
